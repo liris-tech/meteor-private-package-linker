@@ -1,18 +1,21 @@
-import { cleanupPrivatePackages } from './core/cleanup-private-packages.js';
-import { linkPrivatePackages } from './core/link-private-packages.js';
-import { relinkPrivatePackagesOnChange } from './core/relink-private-packages-on-change.js';
+import {
+    STATE,
+} from './src/state.js';
 
-import { computePrivatePackagesMetaData } from './utils/meteor-packages.js';
+import {
+    updateStateAndRelinkPackages,
+} from './src/update-state-and-relink-packages.js';
+import {
+    onFileChange,
+    log,
+    startLogger
+} from './src/utils.js';
 
-import { getAbsPath } from './utils/getAbsPath.js';
+import _ from 'lodash';
 
 import process from 'node:process';
-import events from 'node:events';
 
 // =====================================================================================================================
-
-export const globalEvents = new events.EventEmitter();
-
 
 main(process.argv.slice(2), {
     dotMeteorPackagesPath: '/home/giskard/projects/liris_tech/code/liris/liris_app/.meteor/packages',
@@ -22,33 +25,30 @@ main(process.argv.slice(2), {
 
 
 function main(commandLineArgs, paths={}) {
-    const dotMeteorPackagesPath = paths.dotMeteorPackagesPath ??
-        getAbsPath('.meteor', 'packages');
-    const privatePackagesSrcPath = paths.privatePackagesSrcPath ??
-        getAbsPath(process.env['METEOR_PRIVATE_PACKAGE_DIRS'] || env['METEOR_PACKAGE_DIRS'] || 'packages');
-    const privatePackagesBuildPath = paths.privatePackagesBuildPath ??
-        getAbsPath(process.env['METEOR_PACKAGE_DIRS'] || 'packages');
+    startLogger(commandLineArgs.includes('--verbose') ? console.log : _.noop)
+    const isWatching = commandLineArgs.includes('--watch');
 
-    startLinker(commandLineArgs, { dotMeteorPackagesPath, privatePackagesSrcPath, privatePackagesBuildPath });
+    log(`meteor-private-package-linker started with ${commandLineArgs}`);
 
-    globalEvents.on('reboot', () => {
-        startLinker(commandLineArgs, { dotMeteorPackagesPath, privatePackagesSrcPath, privatePackagesBuildPath });
+    STATE.init({paths});
+    log(`Path of .meteor/packages: ${STATE.dotMeteorPackagesPath}`);
+    log(`Path of private packages ${STATE.privatePackagesSrcPath}`);
+    if (STATE.privatePackagesSrcPath !== STATE.privatePackagesBuildPath) {
+        log(`Path of private packages build: ${STATE.privatePackagesBuildPath}`);
+    }
+
+    log(`List of all private packages:`);
+    _.forEach(STATE.privatePackagesMetaData, (pkg) => {
+        log(`- ${pkg.packageName} ${pkg.usedInProject ? "[used]" : "[x]"}`);
     });
-}
 
-
-function startLinker(commandLineArgs, { dotMeteorPackagesPath, privatePackagesSrcPath, privatePackagesBuildPath }) {
-    const privatePackagesMetaData = computePrivatePackagesMetaData(privatePackagesSrcPath, privatePackagesBuildPath,
-        dotMeteorPackagesPath);
-    const log = commandLineArgs.includes('--verbose') ? console.log : x => undefined;
-    cleanupPrivatePackages(privatePackagesMetaData, privatePackagesSrcPath, privatePackagesBuildPath);
-    linkPrivatePackages(privatePackagesMetaData);
-
-    if (commandLineArgs.includes('--watch')) {
-        relinkPrivatePackagesOnChange(privatePackagesMetaData,
-            { dotMeteorPackagesPath, privatePackagesSrcPath, privatePackagesBuildPath, log });
+    if (isWatching) {
+        log(`List of watched paths:`);
+        _.forEach(STATE.fileWatchers, (watcher) => {
+            log(`- ${watcher.path} [${watcher.eventTypes}]`);
+        });
+        onFileChange(([eventType, fileAbsPath, packageName]) => {
+            updateStateAndRelinkPackages([eventType, fileAbsPath, packageName], STATE);
+        });
     }
 }
-
-
-

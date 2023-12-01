@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/liris-tech/meteor-private-package-linker#readme",
   "dependencies": {
+    "@liris-tech/hidash": "^0.0.1",
     "chokidar": "^3.5.3",
     "lodash": "^4.17.21"
   }

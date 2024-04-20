@@ -1,5 +1,5 @@
 {
-  "name": "meteor-private-package-linker",
+  "name": "@liris-tech/meteor-private-package-linker",
   "version": "0.1.0",
   "description": "Creates the necessary symlink structure for interdependent private Meteor packages",
   "type": "module",

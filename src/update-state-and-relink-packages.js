@@ -2,13 +2,15 @@ import { STATE } from './state.js';
 
 import {
     syncFilesBetweenSrcAndBuild,
+    removeSrcFileFromBuild,
     getPackageNames,
     getPackageNamesWith,
+    getPrivatePackageNamesUsedInProject,
     getDependenciesDeep,
     readProjectPackageNames,
     readPackageName,
     readPackageDeps,
-    log
+    log,
 } from './utils.js';
 
 import { diff } from '@liris-tech/hidash';
@@ -46,10 +48,22 @@ export function updateStateAndRelinkPackages([eventType, fileAbsPath, packageNam
         return processAdditionOfPrivatePackage();
     }
 
+    else if (eventType === 'add' && !fileAbsPath.endsWith('package.js')) {
+        log(`|-- source file inside existing private package added.`);
+
+        return processAdditionOfSourceFileInPrivatePackage(fileAbsPath, privatePackagesMetaData);
+    }
+
     else if (eventType === 'unlink' && fileAbsPath.endsWith('package.js')) {
         log(`|-- existing package.js file removed. Potentially deleted package.`);
 
         return processDeletionOfPrivatePackage();
+    }
+
+    else if (eventType === 'unlink' && !fileAbsPath.endsWith('package.js')) {
+        log(`|-- source file inside existing private package deleted.`);
+
+        return processDeletionOfSourceFileInPrivatePackage(fileAbsPath, privatePackagesMetaData);
     }
 }
 
@@ -62,12 +76,6 @@ function processChangeInDotMeteorPackages(dotMeteorPackagesPath, privatePackages
 
     if (_.isEqual(topLevelPrivatePackagesBefore, topLevelPrivatePackagesAfter)) {
         log(`     |-- no change in top-level private meteor packages. No relinking to be done.`);
-
-        return {
-            changedPrivatePackagesMetaData: false,
-            changedFileWatchers: false,
-            changedFileSystem: false
-        }
     }
     else {
         log(`    |-- top-level private meteor packages changed!`);
@@ -132,7 +140,6 @@ function processChangeInDotMeteorPackages(dotMeteorPackagesPath, privatePackages
             });
 
             STATE.updateLinks({op: 'link', packageNames: addedUsedPackageNames});
-            STATE.updateFileWatchers({op: 'register', options: {packageNames: addedUsedPackageNames}});
             STATE.updateLinks({op: 'unlink', packageNames: removedUsedPackageNames});
         }
     }
@@ -191,11 +198,48 @@ function processChangeInPrivatePackage(fileAbsPath, packageName, privatePackages
                     depNames: removedDeps
                 });
 
+                const packageNamesUsedInProjectBefore = getPackageNamesWith(privatePackagesMetaData,
+                    {usedInProject: true});
+                const packageNamesUsedInProjectAfter = getPrivatePackageNamesUsedInProject(privatePackagesMetaData);
+
+                if (_.isEqual(packageNamesUsedInProjectBefore, packageNamesUsedInProjectAfter)) {
+                    log(`        |-- no change in packages used in project`);
+                }
+                else {
+                    log(`        |-- changes in packages used in project!`);
+                    const [addedPackageNamesUsedInProject, removedPackageNamesUsedInProject] =
+                        diff(packageNamesUsedInProjectAfter, packageNamesUsedInProjectBefore);
+
+                    log(`        |-- added: ${JSON.stringify(addedPackageNamesUsedInProject)}`);
+                    log(`        |-- removed: ${JSON.stringify(removedPackageNamesUsedInProject)}`);
+
+                    STATE.updatePrivatePackagesMetaData({
+                        op: 'set',
+                        selector: {packageNames: addedPackageNamesUsedInProject},
+                        transform: {usedInProject: true}
+                    });
+                    STATE.updatePrivatePackagesMetaData({
+                        op: 'set',
+                        selector: {packageNames: removedPackageNamesUsedInProject},
+                        transform: {usedInProject: false}
+                    });
+
+                    STATE.updateLinks({
+                        op: 'link',
+                        packageNames: addedPackageNamesUsedInProject
+                    });
+                    STATE.updateLinks({
+                        op: 'unlink',
+                        packageNames: removedPackageNamesUsedInProject
+                    });
+                }
+            }
+            if (privatePackagesMetaData[packageName].usedInProject) {
                 syncFilesBetweenSrcAndBuild(fileAbsPath, packageName, privatePackagesMetaData);
             }
         }
     }
-    else {
+    else if (privatePackagesMetaData[packageName].usedInProject) {
         syncFilesBetweenSrcAndBuild(fileAbsPath, packageName, privatePackagesMetaData);
     }
 }
@@ -207,7 +251,33 @@ function processAdditionOfPrivatePackage() {
 }
 
 
+function processAdditionOfSourceFileInPrivatePackage(fileAbsPath, privatePackagesMetaData) {
+    const { packageName } = _.find(privatePackagesMetaData, data => {
+       return fileAbsPath.startsWith(data.packageSrcPath);
+    }) ?? {};
+
+    if (!packageName) {
+        return log(`|-- Package dir must have been renamed as packageName for ${fileAbsPath} wasn't found. Will be recomputed from scratch as soon as package.js is processed. Skipping.`);
+    }
+
+    if (privatePackagesMetaData[packageName].usedInProject) {
+        syncFilesBetweenSrcAndBuild(fileAbsPath, packageName, privatePackagesMetaData);
+    }
+}
+
+
 function processDeletionOfPrivatePackage() {
-    log(`   |-- fallback: recomputing everything from scratch for now...`)
-    STATE.init()
+    log(`   |-- fallback: recomputing everything from scratch for now...`);
+    STATE.init();
+}
+
+
+function processDeletionOfSourceFileInPrivatePackage(fileAbsPath, privatePackagesMetaData) {
+    const { packageName } = _.find(privatePackagesMetaData, data => {
+        return fileAbsPath.startsWith(data.packageSrcPath);
+    });
+
+    if (privatePackagesMetaData[packageName].usedInProject) {
+        removeSrcFileFromBuild(fileAbsPath, packageName, privatePackagesMetaData);
+    }
 }

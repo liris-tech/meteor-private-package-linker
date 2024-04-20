@@ -1,4 +1,6 @@
-import {getEnvPaths} from './update-env-paths.js';
+import {
+    getEnvPaths
+} from './update-env-paths.js';
 import {
     computePrivatePackagesMetaData,
     setPrivatePackagesMetaDataByPackageName
@@ -10,7 +12,7 @@ import {
 } from './update-file-watchers.js';
 import {
     copyPackagesFromSrcToBuildAndLinkDeps,
-    unlinkDepsFromPackages,
+    unlinkPackages,
     unlinkDepsFromPackage,
     symLinkDepsIntoPackage
 } from './update-links.js';
@@ -32,41 +34,37 @@ export const STATE = {
     privatePackagesSrcPath: '',
     privatePackagesBuildPath: '',
 
-    params: {
-      watcherOptions: {
-          dotMeteorPackages() {
-              return {
-                  path: this.dotMeteorPackagesPath,
-                  type: 'dotMeteorPackages',
-                  eventTypes: ['change']
-              }
-          },
-          singlePackageSrc(packageName) {
-              return {
-                  packageName,
-                  path: this.privatePackagesMetaData[packageName].packageSrcPath,
-                  type: 'singlePackageSrc',
-                  chokidarOptions: {
-                      ignoreInitial: true,
-                      ignore: '**/packages',
-                      followSymlinks: false
-                  },
-                  eventTypes: ['change']
-              }
-          },
-          packagesSrc() {
-              return {
-                  path: this.privatePackagesSrcPath,
-                  type: 'packagesSrcPath',
-                  chokidarOptions: {
-                      ignoreInitial: true,
-                      ignore: '**/packages',
-                      followSymlinks: false
-                  },
-                  eventTypes: ['add', 'unlink']
-              }
-          }
-      }
+    getParams(options, args) {
+        return _.get({
+            watcher: {
+                dotMeteorPackages: () => ({
+                    path: STATE.dotMeteorPackagesPath,
+                    type: 'dotMeteorPackages',
+                    eventTypes: ['change']
+                }),
+                singlePackageSrc: ({packageName}) => ({
+                    packageName,
+                    path: STATE.privatePackagesMetaData[packageName].packageSrcPath,
+                    type: 'singlePackageSrc',
+                    chokidarOptions: {
+                        ignoreInitial: true,
+                        ignored: `${STATE.privatePackagesMetaData[packageName].packageSrcPath}/**/packages`,
+                        followSymlinks: false
+                    },
+                    eventTypes: ['change']
+                }),
+                packagesSrc: () => ({
+                    path: STATE.privatePackagesSrcPath,
+                    type: 'packagesSrcPath',
+                    chokidarOptions: {
+                        ignoreInitial: true,
+                        ignored: `${STATE.privatePackagesSrcPath}/**/packages`,
+                        followSymlinks: false
+                    },
+                    eventTypes: ['add', 'unlink']
+                })
+            }
+        }, options)(args)
     },
 
     init({paths={}} = {}) {
@@ -115,21 +113,21 @@ export const STATE = {
         if (op === 'init') {
             unregisterAllFileWatchers(this.fileWatchers);
 
-            registerFileWatcher(this.fileWatchers, this.params.watcherOptions.dotMeteorPackages.call(this));
+            registerFileWatcher(this.fileWatchers, this.getParams(['watcher', 'dotMeteorPackages']));
 
             this.updateFileWatchers({
                 op: 'register',
                 options: {packageNames: getPackageNames(this.privatePackagesMetaData)}
             });
 
-            registerFileWatcher(this.fileWatchers, this.params.watcherOptions.packagesSrc.call(this));
+            registerFileWatcher(this.fileWatchers, this.getParams(['watcher', 'packagesSrc']));
         }
         else if (op === 'register') {
             if (_.isEqual(_.keys(options), ['packageNames'])) {
                 for (const packageName of options.packageNames) {
                     registerFileWatcher(
                         this.fileWatchers,
-                        this.params.watcherOptions.singlePackageSrc.call(this, packageName)
+                        this.getParams(['watcher', 'singlePackageSrc'], {packageName})
                     );
                 }
             }
@@ -165,7 +163,7 @@ export const STATE = {
                 privatePackagesMetaData: this.privatePackagesMetaData});
         }
         else if (op === 'unlink') {
-            unlinkDepsFromPackages({
+            unlinkPackages({
                 packageNames,
                 privatePackagesMetaData: this.privatePackagesMetaData});
         }

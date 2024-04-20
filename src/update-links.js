@@ -1,5 +1,7 @@
-import { mkdirIfNotExists } from '../utils/mkdirIfNotExists.js';
-import { rmdirIfEmpty } from '../utils/rmdirIfEmpty.js';
+import {
+    mkdirIfNotExists,
+    rmdirIfEmpty
+} from '@liris-tech/hidash';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -61,11 +63,27 @@ function symLinkDepIntoPackage({ depName, packageName, privatePackagesMetaData }
 }
 
 
-export function unlinkDepsFromPackages( { packageNames, privatePackagesMetaData }) {
+export function unlinkPackages({ packageNames, privatePackagesMetaData }) {
     for (const packageName of packageNames) {
-        fs.rmSync(path.join(privatePackagesMetaData[packageName].packageBuildPath), {recursive: true});
+        const { packageSrcPath, packageBuildPath } = privatePackagesMetaData[packageName];
+        if (packageSrcPath !== packageBuildPath) {
+            // we can completely remove the package in the build directory as the source is elsewhere
+            fs.rmSync(privatePackagesMetaData[packageName].packageBuildPath, {recursive: true});
+        }
+        else {
+            // we have to be careful not to remove the package source but only the nested symlinked dependencies
+            // contained in the 'packages' subdirectory
+            const nestedDependenciesPath = path.join(privatePackagesMetaData[packageName].packageBuildPath, 'packages');
+
+            // checking for nestedDependenciesPath existence as a package might not depend on any other package in which
+            // case, it won't contain a 'packages' subdirectory
+            if (fs.existsSync(nestedDependenciesPath)) {
+                fs.rmSync(nestedDependenciesPath, {recursive: true});
+            }
+        }
     }
 }
+
 
 export function unlinkDepsFromPackage({ depNames, packageName, privatePackagesMetaData }) {
     for (const depName of depNames) {

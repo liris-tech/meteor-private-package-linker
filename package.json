@@ -1,11 +1,11 @@
 {
   "name": "meteor-private-package-linker",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Creates the necessary symlink structure for interdependent private Meteor packages",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/index.js"
   },
   "repository": {
     "type": "git",
@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/liris-tech/meteor-private-package-linker#readme",
   "dependencies": {
-    "@liris-tech/hidash": "^0.0.1",
+    "@liris-tech/hidash": "^0.3.0",
     "chokidar": "^3.5.3",
     "lodash": "^4.17.21"
   }

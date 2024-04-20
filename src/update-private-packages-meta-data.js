@@ -6,9 +6,10 @@ import {
     isMeteorPackage
 } from './utils.js';
 
-import {walkDir} from '../utils/walkDir.js';
-import {isDir} from '../utils/isDir.js';
-
+import {
+    walkDir,
+    isDir
+} from '@liris-tech/hidash';
 import _ from 'lodash';
 
 import fs from 'node:fs';
@@ -20,9 +21,10 @@ export function computePrivatePackagesMetaData({ dotMeteorPackagesPath,
                                             privatePackagesSrcPath,
                                             privatePackagesBuildPath }) {
     const topLevelPackageNames = readProjectPackageNames(dotMeteorPackagesPath);
-    let privatePackagesMetaData = walkDir(privatePackagesSrcPath,
-        {isLeaf: (absPath) => !isDir(absPath) || isMeteorPackage(absPath)},
-        (absPath) => {
+    let privatePackagesMetaData = walkDir({
+        fromPath: privatePackagesSrcPath,
+        options: {isLeaf: (absPath) => !isDir(absPath) || isMeteorPackage(absPath)},
+        callback: (absPath) => {
             if (isMeteorPackage(absPath)) {
                 const packageDotJs = fs.readFileSync(path.join(absPath, 'package.js')).toString();
                 const packageName = readPackageName(packageDotJs);
@@ -37,7 +39,7 @@ export function computePrivatePackagesMetaData({ dotMeteorPackagesPath,
                     isTopLevelPrivatePackage: topLevelPackageNames.includes(packageName),
                 }
             }
-        }).filter(_.identity);
+        }}).filter(_.identity);
 
     const privatePackageNames = _.map(privatePackagesMetaData, 'packageName');
     for (const data of privatePackagesMetaData) {

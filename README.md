@@ -1,5 +1,5 @@
 # [WIP - not usable yet] meteor-private-package-linker
-Creates the necessary symlink structure for interdependent private Meteor packages.
+Creates the symlink structure for interdependent private Meteor packages.
 
 # Problem statement
 The way to encapsulate Meteor dependent code in Meteor projects is by using Meteor packages and publishing them to [Atmosphere](https://atmospherejs.com/).
